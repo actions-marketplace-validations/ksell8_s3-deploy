@@ -1,0 +1,51 @@
+name: s3deploy
+description: Install bep/s3deploy (verified release binary, or go install where none exists) and optionally run it.
+author: Kurt Sell
+branding:
+  icon: upload-cloud
+  color: orange
+
+inputs:
+  version:
+    description: s3deploy version without the "v", e.g. 2.16.0. Pinned on purpose; "latest" is not accepted.
+    required: false
+    # renovate: datasource=github-releases depName=bep/s3deploy
+    default: "2.16.0"
+  args:
+    description: >-
+      Extra arguments passed straight to s3deploy (split like a command line: spaces separate,
+      double quotes group). Configure everything else with S3DEPLOY_* env vars or .s3deploy.yml.
+    required: false
+    default: ""
+  install-only:
+    description: Install s3deploy and add it to PATH, but don't run it.
+    required: false
+    default: "false"
+  download-base-url:
+    description: >-
+      Where release assets are downloaded from. The action appends /v<version>/<asset>.
+      Override for runners that can't reach github.com (e.g. an Artifactory or Nexus mirror).
+    required: false
+    default: https://github.com/bep/s3deploy/releases/download
+  use-preinstalled:
+    description: If true and an s3deploy reporting the requested version is already on PATH, use it and skip downloading.
+    required: false
+    default: "false"
+  go-fallback:
+    description: Allow go install on platforms with no release binary (Go must already be on PATH). If false, fail on those platforms.
+    required: false
+    default: "true"
+
+outputs:
+  path:
+    description: Absolute path to the s3deploy (or s3deploy.exe) binary.
+  version:
+    description: Version reported by s3deploy -V.
+  cache-hit:
+    description: "'true' if the binary came from the tool cache."
+  install-method:
+    description: One of release, go-install, preinstalled or cache.
+
+runs:
+  using: node24
+  main: dist/index.js

@@ -1,0 +1,30 @@
+name: Move major tag
+
+# When a release (e.g. v1.2.3) is published, point the major tag (v1) at it,
+# so users of ksell8/s3-deploy@v1 get the update.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  major-tag:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Update major tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::notice::$TAG is not vX.Y.Z; not moving a major tag."
+            exit 0
+          fi
+          major="v${BASH_REMATCH[1]}"
+          git tag -f "$major" "$TAG^{commit}"
+          git push -f origin "refs/tags/$major"
+          echo "Moved $major to $TAG"

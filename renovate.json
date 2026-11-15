@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "custom.regex"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Default s3deploy version in action.yml, the README and CI",
+      "managerFilePatterns": [
+        "/^action\\.yml$/",
+        "/^README\\.md$/",
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\S+:\\s*\"?(?<currentValue>\\d+\\.\\d+\\.\\d+)\"?",
+        "<!-- renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) -->\\s*[^\\d]*(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    }
+  ]
+}

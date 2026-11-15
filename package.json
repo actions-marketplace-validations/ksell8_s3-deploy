@@ -1,0 +1,28 @@
+{
+  "name": "s3deploy-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GitHub Action that installs and runs bep/s3deploy",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "ncc build src/index.js -o dist --license licenses.txt",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "@actions/io": "^3.0.2",
+    "@actions/tool-cache": "^4.0.0",
+    "fflate": "^0.8.3",
+    "tar": "^7.5.23"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.45.0",
+    "vitest": "^5.1.0"
+  }
+}

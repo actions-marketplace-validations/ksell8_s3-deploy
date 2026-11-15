@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # renovate: datasource=github-releases depName=bep/s3deploy
+  S3DEPLOY_TEST_VERSION: 2.16.0
+
+jobs:
+  unit:
+    name: Unit tests and dist check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Check dist/ is up to date
+        run: |
+          npm run build
+          if ! git diff --exit-code --stat -- dist; then
+            echo "::error::dist/ is out of date. Run 'npm run build' and commit the result."
+            exit 1
+          fi
+
+  install:
+    name: Install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            method: release
+          - os: macos-latest
+            method: release
+          - os: windows-latest
+            method: release
+          - os: ubuntu-24.04-arm
+            method: go-install
+            go: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - if: matrix.go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+
+      - name: First install
+        id: first
+        uses: ./
+        with:
+          version: ${{ env.S3DEPLOY_TEST_VERSION }}
+          install-only: true
+
+      - name: s3deploy is on PATH in a later step
+        shell: bash
+        run: |
+          s3deploy -V
+          s3deploy -V | grep -F "s3deploy v${S3DEPLOY_TEST_VERSION},"
+
+      - name: Second install (cache hit)
+        id: second
+        uses: ./
+        with:
+          version: ${{ env.S3DEPLOY_TEST_VERSION }}
+          install-only: true
+
+      - name: Preinstalled binary is reused
+        id: pre
+        uses: ./
+        with:
+          version: ${{ env.S3DEPLOY_TEST_VERSION }}
+          install-only: true
+          use-preinstalled: true
+
+      - name: Check outputs
+        shell: bash
+        env:
+          FIRST: ${{ toJSON(steps.first.outputs) }}
+          SECOND: ${{ toJSON(steps.second.outputs) }}
+          PRE: ${{ toJSON(steps.pre.outputs) }}
+          EXPECTED_METHOD: ${{ matrix.method }}
+        run: |
+          echo "first:  $FIRST"; echo "second: $SECOND"; echo "pre:    $PRE"
+          fail() { echo "::error::$1"; exit 1; }
+          [ "${{ steps.first.outputs.version }}" = "$S3DEPLOY_TEST_VERSION" ] || fail "version output mismatch"
+          [ "${{ steps.first.outputs.install-method }}" = "$EXPECTED_METHOD" ] || fail "first install-method is not $EXPECTED_METHOD"
+          [ "${{ steps.first.outputs.cache-hit }}" = "false" ] || fail "first run should not be a cache hit"
+          [ -x "${{ steps.first.outputs.path }}" ] || [ -f "${{ steps.first.outputs.path }}" ] || fail "path output does not exist"
+          [ "${{ steps.second.outputs.cache-hit }}" = "true" ] || fail "second run should be a cache hit"
+          [ "${{ steps.second.outputs.install-method }}" = "cache" ] || fail "second install-method should be cache"
+          [ "${{ steps.second.outputs.version }}" = "$S3DEPLOY_TEST_VERSION" ] || fail "cached version mismatch"
+          [ "${{ steps.pre.outputs.install-method }}" = "preinstalled" ] || fail "use-preinstalled was not honoured"
+
+  no-go:
+    name: Fallback without Go fails clearly (expected failure)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: PATH without go
+        id: nogo
+        shell: bash
+        run: |
+          p=""
+          IFS=: read -ra parts <<< "$PATH"
+          for d in "${parts[@]}"; do [ -x "$d/go" ] || p="${p:+$p:}$d"; done
+          echo "path=$p" >> "$GITHUB_OUTPUT"
+      - name: Install with no prebuilt binary and no Go
+        id: x
+        continue-on-error: true
+        uses: ./
+        env:
+          PATH: ${{ steps.nogo.outputs.path }}
+        with:
+          install-only: true
+      - name: Assert it failed
+        if: steps.x.outcome != 'failure'
+        run: |
+          echo "::error::Expected the action to fail without Go on linux/arm64 (outcome: ${{ steps.x.outcome }})"
+          exit 1
+      - name: go-fallback false also fails
+        id: y
+        continue-on-error: true
+        uses: ./
+        with:
+          install-only: true
+          go-fallback: false
+      - name: Assert it failed
+        if: steps.y.outcome != 'failure'
+        run: |
+          echo "::error::Expected go-fallback: false to fail on linux/arm64 (outcome: ${{ steps.y.outcome }})"
+          exit 1
+
+  checksum:
+    name: Mirror and checksum mismatch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Serve a local mirror with a good and a corrupted checksums file
+        run: |
+          v="$S3DEPLOY_TEST_VERSION"
+          base="https://github.com/bep/s3deploy/releases/download/v$v"
+          for d in good bad; do
+            mkdir -p "mirror/$d/v$v"
+            (cd "mirror/$d/v$v" && curl -fsSLO "$base/s3deploy_${v}_checksums.txt" && curl -fsSLO "$base/s3deploy_${v}_linux-amd64.tar.gz")
+          done
+          sed -i -E "s/^[0-9a-f]{64}(  s3deploy_${v}_linux-amd64\.tar\.gz)$/$(printf '0%.0s' {1..64})\1/" "mirror/bad/v$v/s3deploy_${v}_checksums.txt"
+          cat "mirror/bad/v$v/s3deploy_${v}_checksums.txt"
+          (cd mirror && nohup python3 -m http.server 8000 --bind 127.0.0.1 > ../http.log 2>&1 &)
+          for i in $(seq 20); do curl -fs "http://127.0.0.1:8000/good/v$v/s3deploy_${v}_checksums.txt" > /dev/null && break; sleep 0.5; done
+      - name: Corrupted checksum must fail
+        id: bad
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ env.S3DEPLOY_TEST_VERSION }}
+          install-only: true
+          download-base-url: http://127.0.0.1:8000/bad
+      - name: Assert it failed
+        if: steps.bad.outcome != 'failure'
+        run: |
+          echo "::error::A checksum mismatch did not fail the action (outcome: ${{ steps.bad.outcome }})"
+          exit 1
+      - name: Good mirror installs
+        id: good
+        uses: ./
+        with:
+          version: ${{ env.S3DEPLOY_TEST_VERSION }}
+          install-only: true
+          download-base-url: http://127.0.0.1:8000/good
+      - name: Assert mirror install
+        run: |
+          [ "${{ steps.good.outputs.install-method }}" = release ]
+          [ "${{ steps.good.outputs.version }}" = "$S3DEPLOY_TEST_VERSION" ]
+          grep -q "GET /good/v$S3DEPLOY_TEST_VERSION/s3deploy_${S3DEPLOY_TEST_VERSION}_linux-amd64.tar.gz" http.log
+
+  deploy:
+    name: Deploy to MinIO
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      # A service container can't pass MinIO its "server" command, so start it here.
+      # MINIO_DOMAIN enables the virtual-host-style requests s3deploy makes (test.localhost).
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -e MINIO_DOMAIN=localhost \
+            minio/minio server /data
+          echo "127.0.0.1 test.localhost" | sudo tee -a /etc/hosts
+          for i in $(seq 30); do curl -fs http://localhost:9000/minio/health/live && break; sleep 1; done
+          aws --endpoint-url http://localhost:9000 s3 mb s3://test
+      - name: Deploy testdata
+        uses: ./
+        env:
+          S3DEPLOY_PATH: ci/
+        with:
+          version: ${{ env.S3DEPLOY_TEST_VERSION }}
+          args: -endpoint-url http://localhost:9000 -bucket test -source ./testdata -v
+      - name: Assert the files landed
+        run: |
+          aws --endpoint-url http://localhost:9000 s3 ls --recursive s3://test | tee listing.txt
+          grep -q " ci/index.html$" listing.txt
+          grep -q " ci/sub/style.css$" listing.txt
+      - if: failure()
+        run: docker logs minio
