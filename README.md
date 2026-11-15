@@ -138,7 +138,7 @@ npm run build   # bundles src/ into dist/ with ncc; commit dist/
 
 CI fails if `dist/` doesn't match a fresh build. The CI workflow also installs on Linux, macOS, Windows and Linux
 ARM64 (Go fallback), checks the cache hit and `use-preinstalled`, checks that a missing Go and a corrupted checksum
-fail, and deploys to a MinIO container.
+fail, and deploys to a local S3 server (moto).
 
 ### Releasing
 
