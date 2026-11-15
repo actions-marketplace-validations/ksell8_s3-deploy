@@ -194,18 +194,32 @@ jobs:
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
+      MINIO_IMAGE: quay.io/minio/minio:latest
+      MINIO_IMAGE_FALLBACK: minio/minio:latest
     steps:
       - uses: actions/checkout@v7
       # A service container can't pass MinIO its "server" command, so start it here.
       # MINIO_DOMAIN enables the virtual-host-style requests s3deploy makes (test.localhost).
       - name: Start MinIO
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -e MINIO_DOMAIN=localhost \
-            minio/minio server /data
+          start() {
+            docker run -d --name minio -p 9000:9000 \
+              -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -e MINIO_DOMAIN=localhost \
+              "$1" server /data > docker.log 2>&1
+          }
+          started=""
+          for image in "$MINIO_IMAGE" "$MINIO_IMAGE_FALLBACK"; do
+            if start "$image"; then started="$image"; break; fi
+            echo "::warning::docker run $image failed: $(tr '\n' ' ' < docker.log)"
+            docker rm -f minio > /dev/null 2>&1 || true
+          done
+          [ -n "$started" ] || { echo "::error::Could not start MinIO"; exit 1; }
+          echo "Started $started"
           echo "127.0.0.1 test.localhost" | sudo tee -a /etc/hosts
           for i in $(seq 30); do curl -fs http://localhost:9000/minio/health/live && break; sleep 1; done
-          aws --endpoint-url http://localhost:9000 s3 mb s3://test
+          if ! aws --endpoint-url http://localhost:9000 s3 mb s3://test > mb.log 2>&1; then
+            echo "::error::Creating the bucket failed: $(tr '\n' ' ' < mb.log)"; exit 1
+          fi
       - name: Deploy testdata
         uses: ./
         env:
@@ -216,7 +230,8 @@ jobs:
       - name: Assert the files landed
         run: |
           aws --endpoint-url http://localhost:9000 s3 ls --recursive s3://test | tee listing.txt
-          grep -q " ci/index.html$" listing.txt
-          grep -q " ci/sub/style.css$" listing.txt
+          for f in ci/index.html ci/sub/style.css; do
+            grep -q " $f$" listing.txt || { echo "::error::$f not in bucket: $(tr '\n' ' ' < listing.txt)"; exit 1; }
+          done
       - if: failure()
-        run: docker logs minio
+        run: docker logs minio || true
