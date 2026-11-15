@@ -9,11 +9,23 @@ on:
 permissions:
   contents: read
 
-env:
-  # renovate: datasource=github-releases depName=bep/s3deploy
-  S3DEPLOY_TEST_VERSION: 2.16.0
-
 jobs:
+  # The default s3deploy version lives in s3deploy-version/go.mod (bumped by
+  # Dependabot); every test job runs against it.
+  version:
+    name: Read default s3deploy version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        run: |
+          v=$(sed -nE 's#^[[:space:]]*(require[[:space:]]+)?github\.com/bep/s3deploy/v2[[:space:]]+v([0-9][^[:space:]]*).*#\2#p' s3deploy-version/go.mod)
+          [ -n "$v" ] || { echo "::error::No github.com/bep/s3deploy/v2 requirement in s3deploy-version/go.mod"; exit 1; }
+          echo "Default s3deploy version: $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
   unit:
     name: Unit tests and dist check
     runs-on: ubuntu-latest
@@ -48,7 +60,10 @@ jobs:
           - os: ubuntu-24.04-arm
             method: go-install
             go: true
+    needs: version
     runs-on: ${{ matrix.os }}
+    env:
+      S3DEPLOY_TEST_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - if: matrix.go
@@ -57,11 +72,10 @@ jobs:
           go-version: stable
           cache: false
 
-      - name: First install
+      - name: First install (default version from go.mod)
         id: first
         uses: ./
         with:
-          version: ${{ env.S3DEPLOY_TEST_VERSION }}
           install-only: true
 
       - name: s3deploy is on PATH in a later step
@@ -106,6 +120,7 @@ jobs:
 
   no-go:
     name: Fallback without Go fails clearly (expected failure)
+    needs: version
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -145,7 +160,10 @@ jobs:
 
   checksum:
     name: Mirror and checksum mismatch
+    needs: version
     runs-on: ubuntu-latest
+    env:
+      S3DEPLOY_TEST_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - name: Serve a local mirror with a good and a corrupted checksums file
@@ -188,12 +206,14 @@ jobs:
 
   deploy:
     name: Deploy to a local S3 server
+    needs: version
     runs-on: ubuntu-latest
     env:
       AWS_ACCESS_KEY_ID: testing
       AWS_SECRET_ACCESS_KEY: testing
       AWS_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: "true"
+      S3DEPLOY_TEST_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       # MinIO no longer publishes container images (Docker Hub and quay.io both refuse

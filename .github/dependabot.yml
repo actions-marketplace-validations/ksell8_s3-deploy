@@ -11,3 +11,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Default s3deploy version (see s3deploy-version/go.mod).
+  - package-ecosystem: gomod
+    directory: /s3deploy-version
+    schedule:
+      interval: weekly

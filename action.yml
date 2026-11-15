@@ -7,10 +7,11 @@ branding:
 
 inputs:
   version:
-    description: s3deploy version without the "v", e.g. 2.16.0. Pinned on purpose; "latest" is not accepted.
+    description: >-
+      s3deploy version, e.g. 2.16.0 (a leading "v" is fine; "latest" and ranges are not accepted).
+      Empty means the version pinned in this action's s3deploy-version/go.mod, which Dependabot keeps current.
     required: false
-    # renovate: datasource=github-releases depName=bep/s3deploy
-    default: "2.16.0"
+    default: ""
   args:
     description: >-
       Extra arguments passed straight to s3deploy (split like a command line: spaces separate,

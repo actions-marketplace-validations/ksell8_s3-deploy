@@ -31809,7 +31809,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
 /***/ ((__webpack_module__, __unused_webpack___webpack_exports__, __nccwpck_require__) => {
 
 __nccwpck_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
-/* harmony import */ var _main_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(6354);
+/* harmony import */ var _main_js__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(501);
 
 
 await (0,_main_js__WEBPACK_IMPORTED_MODULE_0__/* .run */ .e)();
@@ -31819,7 +31819,7 @@ __webpack_async_result__();
 
 /***/ }),
 
-/***/ 6354:
+/***/ 501:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 
@@ -34833,10 +34833,50 @@ function args_argStringToArray(input) {
 
 ;// CONCATENATED MODULE: external "node:fs/promises"
 const promises_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs/promises");
-;// CONCATENATED MODULE: external "node:os"
-const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
 ;// CONCATENATED MODULE: external "node:path"
 const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+// EXTERNAL MODULE: external "node:url"
+var external_node_url_ = __nccwpck_require__(3136);
+;// CONCATENATED MODULE: ./src/default-version.js
+
+
+
+
+const MODULE = 'github.com/bep/s3deploy/v2';
+
+// Path segments are kept in an array so the bundler doesn't inline go.mod into
+// dist/: it must be read from the repository at run time, so a Dependabot bump
+// of go.mod changes the default without rebuilding dist/.
+const GO_MOD = ['..', 's3deploy-version', 'go.mod'];
+
+// Returns "2.16.0" from a go.mod that requires github.com/bep/s3deploy/v2 v2.16.0
+// (single-line or block require), or null.
+function parseGoModVersion(text) {
+  const escaped = MODULE.replace(/[.]/g, '\\.');
+  const re = new RegExp(`^\\s*(?:require\\s+)?${escaped}\\s+v(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)\\b`, 'm');
+  const m = re.exec(String(text ?? '').replace(/\/\/.*$/gm, ''));
+  return m ? m[1] : null;
+}
+
+// dist/index.js and src/*.js both sit one level below the repository root.
+function goModPath(fromUrl = import.meta.url) {
+  return external_node_path_namespaceObject.join(external_node_path_namespaceObject.dirname((0,external_node_url_.fileURLToPath)(fromUrl)), ...GO_MOD);
+}
+
+async function readDefaultVersion(file = goModPath()) {
+  let text;
+  try {
+    text = await (0,promises_namespaceObject.readFile)(file, 'utf8');
+  } catch (err) {
+    throw new Error(`No version input given and the default could not be read from ${file}: ${err.message}`);
+  }
+  const v = parseGoModVersion(text);
+  if (!v) throw new Error(`No version input given and ${file} has no "${MODULE} vX.Y.Z" requirement.`);
+  return v;
+}
+
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:os");
 // EXTERNAL MODULE: ./node_modules/semver/index.js
 var node_modules_semver = __nccwpck_require__(2088);
 ;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/manifest.js
@@ -38627,10 +38667,12 @@ async function install({
 
 
 
+
 async function run() {
   try {
     ensureRunnerDirs();
-    const version = normalizeVersion(getInput('version', { required: true }));
+    const versionInput = getInput('version');
+    const version = normalizeVersion(versionInput || (await readDefaultVersion()));
     const baseUrl = getInput('download-base-url', { required: true }).replace(/\/+$/, '');
     const installOnly = getBooleanInput('install-only');
     const usePreinstalled = getBooleanInput('use-preinstalled');

@@ -1,13 +1,15 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import { argStringToArray } from './args.js';
+import { readDefaultVersion } from './default-version.js';
 import { ensureRunnerDirs, install, reportedVersion } from './install.js';
 import { normalizeVersion } from './platform.js';
 
 export async function run() {
   try {
     ensureRunnerDirs();
-    const version = normalizeVersion(core.getInput('version', { required: true }));
+    const versionInput = core.getInput('version');
+    const version = normalizeVersion(versionInput || (await readDefaultVersion()));
     const baseUrl = core.getInput('download-base-url', { required: true }).replace(/\/+$/, '');
     const installOnly = core.getBooleanInput('install-only');
     const usePreinstalled = core.getBooleanInput('use-preinstalled');

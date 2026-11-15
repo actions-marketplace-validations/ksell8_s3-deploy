@@ -7,8 +7,8 @@ A GitHub Action that installs [bep/s3deploy](https://github.com/bep/s3deploy) on
 - Builds with `go install` only on platforms upstream publishes no binary for.
 - Has no input per s3deploy flag, so a new s3deploy flag never needs a new release of this action. Configure s3deploy with `S3DEPLOY_*` env vars, the `args` input, or your own `.s3deploy.yml`.
 
-<!-- renovate: datasource=github-releases depName=bep/s3deploy -->
-Default s3deploy version: `2.16.0`.
+The default s3deploy version is the one pinned in [`s3deploy-version/go.mod`](s3deploy-version/go.mod)
+(currently `2.16.0`). Dependabot bumps it when bep/s3deploy publishes a release; pass `version` to pin your own.
 
 ## Usage
 
@@ -64,7 +64,7 @@ See `s3deploy -h` or the [s3deploy README](https://github.com/bep/s3deploy#readm
 
 | Input | Default | Description |
 |---|---|---|
-| `version` | pinned (see above) | s3deploy version, with or without the `v`. Always pinned; `latest` and ranges are rejected. |
+| `version` | from `s3deploy-version/go.mod` | s3deploy version, with or without the `v`. Always an exact version; `latest` and ranges are rejected. |
 | `args` | `""` | Extra arguments passed straight to s3deploy. |
 | `install-only` | `false` | Install and add to `PATH`, but don't run. |
 | `download-base-url` | `https://github.com/bep/s3deploy/releases/download` | Where release assets come from. The action appends `/v<version>/<asset>`. |
@@ -145,8 +145,10 @@ fail, and deploys to a local S3 server (moto).
 Tag `vX.Y.Z` and publish a GitHub release for it; the `Move major tag` workflow then points `vX` at it.
 A new s3deploy version only changes the default `version` (a minor or patch release here). Only an incompatible
 change to this action's own inputs or outputs is a new major version.
-Renovate updates the default s3deploy version (action.yml, README, CI); Dependabot updates npm packages and the
-actions used in CI.
+Dependabot keeps everything current: the default s3deploy version (`gomod` on `s3deploy-version/go.mod`; the action
+reads that file at run time, so no rebuild of `dist/` is needed and the PR's CI tests the new version), npm packages,
+and the actions used in CI. Nothing in `s3deploy-version/` is built; `tools.go` only keeps `go mod tidy` from
+dropping the requirement.
 
 ## License
 
