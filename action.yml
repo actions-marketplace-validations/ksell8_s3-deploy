@@ -1,4 +1,4 @@
-name: s3deploy
+name: s3deploy-go
 description: Install bep/s3deploy (verified release binary, or go install where none exists) and optionally run it.
 author: Kurt Sell
 branding:
