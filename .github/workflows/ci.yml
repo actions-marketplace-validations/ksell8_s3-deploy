@@ -18,7 +18,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - id: v
         run: |
           v=$(sed -nE 's#^[[:space:]]*(require[[:space:]]+)?github\.com/bep/s3deploy/v2[[:space:]]+v([0-9][^[:space:]]*).*#\2#p' s3deploy-version/go.mod)
@@ -30,7 +30,7 @@ jobs:
     name: Unit tests and dist check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -65,7 +65,7 @@ jobs:
     env:
       S3DEPLOY_TEST_VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - if: matrix.go
         uses: actions/setup-go@v7
         with:
@@ -123,7 +123,7 @@ jobs:
     needs: version
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: PATH without go
         id: nogo
         shell: bash
@@ -165,7 +165,7 @@ jobs:
     env:
       S3DEPLOY_TEST_VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Serve a local mirror with a good and a corrupted checksums file
         run: |
           v="$S3DEPLOY_TEST_VERSION"
@@ -215,7 +215,7 @@ jobs:
       AWS_EC2_METADATA_DISABLED: "true"
       S3DEPLOY_TEST_VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       # MinIO no longer publishes container images (Docker Hub and quay.io both refuse
       # the pull), so this uses moto's standalone S3 server instead. It understands the
       # virtual-host-style requests s3deploy makes (http://test.localhost:9000).
